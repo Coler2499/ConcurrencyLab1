@@ -101,6 +101,13 @@ func flattenImage(image [][]uint8) []uint8 {
 	return flattenedImage
 }
 
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8) {
+	//Start parallelising the median filter by creating a worker(...) function. Given a closure and some y and x
+	//bounds it should apply the median filter between these bounds and 'return' the newly created slice.
+	newSlice := medianFilter(startY, endY, startX, endX, data)
+	out <- newSlice
+}
+
 // filter reads in a png image, applies the filter and outputs the result as a png image.
 // filter is the function called by the tests in medianfilter_test.go
 func filter(filepathIn, filepathOut string, threads int) {
@@ -114,11 +121,63 @@ func filter(filepathIn, filepathOut string, threads int) {
 
 	immutableData := makeImmutableMatrix(getPixelData(img))
 	var newPixelData [][]uint8
-	
+
 	if threads == 1 {
 		newPixelData = medianFilter(0, height, 0, width, immutableData)
 	} else {
-		panic("TODO Implement me")
+		//You need to make a slice of type []chan [][]uint8 and then, in a for loop, make individual channels of type chan [][]uint8.
+		//[][]uint8
+		workers := make([]chan [][]uint8, threads)
+		for i := 0; i < threads; i++ {
+			newThread := make(chan [][]uint8)
+			workers = append(workers, newThread)
+			//Worker 1: 0-128
+			//Worker 2: 128-256
+			//Worker 3: 256-384
+			//Worker 3: 384-512
+			//e.g. given bounds 0-128 it will only process pixels in bounds 2-126.
+			go worker(i*(height/threads), (i+1)*(height/threads), 0, width, immutableData, newThread)
+		}
+		////THIS WORKS
+		//newParts := make([][][]uint8, threads*2)
+		//numberOfReturns := 0
+		//for numberOfReturns != threads {
+		//	for currentThread := 0; currentThread < len(workers); currentThread++ {
+		//		select {
+		//		case part := <-workers[currentThread]:
+		//			numberOfReturns++
+		//			newParts[currentThread] = part
+		//		default:
+		//		}
+		//	}
+		//
+		//}
+		//
+		//for _, currentPart := range newParts {
+		//	newPixelData = append(newPixelData, currentPart...)
+		//}
+		////TO HERE
+
+		newParts := make([][][]uint8, threads*2)
+		numberOfReturns := 0
+		currentThread := -1
+		for numberOfReturns != threads {
+			currentThread++
+			if currentThread >= len(workers) {
+				currentThread = 0
+			}
+			select {
+			case part := <-workers[currentThread]:
+				numberOfReturns++
+				newParts[currentThread] = part
+			default:
+			}
+
+		}
+
+		for _, currentPart := range newParts {
+			newPixelData = append(newPixelData, currentPart...)
+		}
 	}
 
 	imout := image.NewGray(image.Rect(0, 0, width, height))
