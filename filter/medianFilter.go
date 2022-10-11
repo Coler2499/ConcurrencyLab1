@@ -5,7 +5,9 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"log"
 	"os"
+	"runtime/trace"
 	"sort"
 )
 
@@ -211,6 +213,23 @@ func main() {
 		"threads",
 		1,
 		"Specify the number of worker threads to use.")
+
+	//THIS CODE IS FROM PING.GO IT GENERATES A TRACE OF EXECUTION:
+	f, err := os.Create("trace.out")
+	if err != nil {
+		log.Fatalf("failed to create trace output file: %v", err)
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatalf("failed to close trace file: %v", err)
+		}
+	}()
+
+	if err := trace.Start(f); err != nil {
+		log.Fatalf("failed to start trace: %v", err)
+	}
+	defer trace.Stop()
+	//END OF tRACE CODE.
 
 	flag.Parse()
 	filter(filepathIn, filepathOut, threads)
